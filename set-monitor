@@ -3,23 +3,56 @@ set -euo pipefail
 
 CONFIG="$HOME/.config/hypr/monitors.conf"
 
+detect_monitors() {
+  # Gibt eine sortierte Liste der verbundenen Monitore zurück: name:widthxheight
+  hyprctl monitors -j | jq -r '.[] | "\(.name):\(.width)x\(.height)"' | sort
+}
+
+generate_home_config() {
+  local monitors=($(detect_monitors))
+  # Beispiel: Immer die beiden ersten Monitore nehmen, links/rechts anordnen
+  # (In echt evtl. intelligenter machen oder Konfiguration abspeichern)
+  if (( ${#monitors[@]} < 2 )); then
+    echo "Nicht genug Monitore erkannt für 'home' Setup"
+    exit 1
+  fi
+  local mon0="${monitors[0]%%:*}"
+  local mon1="${monitors[1]%%:*}"
+
+  cat <<EOF
+env = GDK_SCALE,1
+# home (dynamisch)
+monitor = $mon0, preferred, 0x0, 1
+monitor = $mon1, preferred, auto, 1
+EOF
+}
+
+generate_work_config() {
+  local monitors=($(detect_monitors))
+  if (( ${#monitors[@]} < 3 )); then
+    echo "Nicht genug Monitore erkannt für 'work' Setup"
+    exit 1
+  fi
+  # Nehme die Namen der drei ersten Monitore
+  local mon0="${monitors[0]%%:*}"
+  local mon1="${monitors[1]%%:*}"
+  local mon2="${monitors[2]%%:*}"
+  # Anordnung: mon1 ganz links, mon2 mittig, mon0 rechts
+  cat <<EOF
+env = GDK_SCALE,1
+# work (dynamisch)
+monitor = $mon1, preferred, 0x0, 1
+monitor = $mon2, preferred, auto, 1
+monitor = $mon0, preferred, auto, 1
+EOF
+}
+
 case "${1:-}" in
   home)
-    cat > "$CONFIG" <<EOF
-env = GDK_SCALE,1
-# home
-monitor = DP-3, 2560x1440, 0x0, 1
-monitor = DP-2, 2560x1440, 2560x0, 1
-EOF
+    generate_home_config > "$CONFIG"
     ;;
   work)
-    cat > "$CONFIG" <<EOF
-env = GDK_SCALE,1
-# work
-monitor = DP-4, 2560x1440, 5120x0, 1
-monitor = DP-2, 2560x1440, 0x0, 1
-monitor = DP-11, 2560x1440, 2560x0, 1
-EOF
+    generate_work_config > "$CONFIG"
     ;;
   *)
     echo "Usage: $0 {home|work}"
