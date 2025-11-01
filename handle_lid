@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATE="${1:-}"   # "open" | "close"
+CONFIG="$HOME/.config/hypr/monitors.conf"
+TMP="$(mktemp)"
+
+[[ "$STATE" == "open" || "$STATE" == "close" ]] || {
+  echo "Usage: $0 {open|close}" >&2
+  exit 1
+}
+
+# Bestehende Config ohne eDP-1-Zeilen übernehmen
+# (entfernt jede Zeile, die genau eDP-1 als Monitor referenziert)
+if [[ -f "$CONFIG" ]]; then
+  # -E für ERE; \b Wortgrenze; robust gegen Leerzeichen
+  grep -Ev '^\s*monitor\s*=\s*eDP-1\b' "$CONFIG" > "$TMP" || true
+else
+  : > "$TMP"
+fi
+
+# eDP-1 je nach Deckelzustand voranstellen
+if [[ "$STATE" == "open" ]]; then
+  # aktivieren, automatische Größe/Position/Scale
+  # Wenn du feste Werte willst, ersetze "preferred, auto, 1"
+  sed -i '1i monitor = eDP-1, preferred, auto, 2' "$TMP"
+else
+  # deaktivieren
+  sed -i '1i monitor = eDP-1, disable' "$TMP"
+fi
+
+# Atomar schreiben
+mv "$TMP" "$CONFIG"
+
+# Hyprland neu laden
+hyprctl reload >/dev/null 2>&1 || true
+
+# Optional: Hinweis
+command -v notify-send >/dev/null 2>&1 && \
+  notify-send "Hyprland Monitors" "Lid ${STATE}: eDP-1 $( [[ $STATE == open ]] && echo aktiviert || echo deaktiviert )"
