@@ -7,7 +7,7 @@ Eine Sammlung von nützlichen Bash-Skripten zur Verwaltung von Hyprland-Monitor-
 Dieses Repository enthält mehrere Utility-Skripte für die Verwaltung von Monitor-Konfigurationen und Laptop-Einstellungen unter Hyprland:
 
 - **set-monitor**: Wechsel zwischen vordefinierten Monitor-Konfigurationen (z.B. Home/Work)
-- **handle_lid**: Verwaltung des Laptop-Deckels (aktivieren/deaktivieren des integrierten Displays)
+- **handle_lid**: Verwaltung des Laptop-Deckels (aktivieren/deaktivieren des integrierten Displays oder Automatik-Erkennung)
 - **install.sh**: Installationsskript zum Verlinken aller Skripte in den System-PATH
 
 ## Installation
@@ -46,11 +46,13 @@ Verwaltet den Status des Laptop-Deckels und aktiviert/deaktiviert entsprechend d
 ```bash
 handle_lid open     # Aktiviert das Laptop-Display (Deckel offen)
 handle_lid close    # Deaktiviert das Laptop-Display (Deckel geschlossen)
+handle_lid check    # Erkennt automatisch den aktuellen Deckelstatus und setzt die passende Konfiguration
 ```
 
 **Funktionsweise:**
 - Modifiziert die `~/.config/hypr/monitors.conf` Datei
 - Entfernt bestehende eDP-1 Einträge und fügt neue je nach Status hinzu
+- Bei `handle_lid check` wird der Deckelstatus automatisch ausgelesen und übernommen (offen = Display an, geschlossen = Display aus)
 - Lädt Hyprland neu, um die Änderungen anzuwenden
 - Sendet optional eine Benachrichtigung
 
@@ -91,4 +93,3 @@ PREFIX=/usr/bin ./install.sh
 ## Lizenz
 
 Diese Skripte sind für den persönlichen Gebrauch gedacht.
-

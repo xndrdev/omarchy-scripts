@@ -1,31 +1,45 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-STATE="${1:-}"   # "open" | "close"
 CONFIG="$HOME/.config/hypr/monitors.conf"
 TMP="$(mktemp)"
 
-[[ "$STATE" == "open" || "$STATE" == "close" ]] || {
-  echo "Usage: $0 {open|close}" >&2
+# Funktion checkt ob das Laptop offen oder zu ist (returns 0=open, 1=closed)
+is_lid_open() {
+  local statefile="/proc/acpi/button/lid/LID0/state"
+  if [[ -f "$statefile" ]]; then
+    grep -q 'open' "$statefile"
+  else
+    # Fallback: Angenommen offen, falls keine Info verfügbar
+    return 0
+  fi
+}
+
+STATE="${1:-}"   # "open" | "close" | "check"
+[[ "$STATE" == "open" || "$STATE" == "close" || "$STATE" == "check" ]] || {
+  echo "Usage: $0 {open|close|check}" >&2
   exit 1
 }
 
+if [[ "$STATE" == "check" ]]; then
+  if is_lid_open; then
+    STATE="open"
+  else
+    STATE="close"
+  fi
+fi
+
 # Bestehende Config ohne eDP-1-Zeilen übernehmen
-# (entfernt jede Zeile, die genau eDP-1 als Monitor referenziert)
 if [[ -f "$CONFIG" ]]; then
-  # -E für ERE; \b Wortgrenze; robust gegen Leerzeichen
   grep -Ev '^\s*monitor\s*=\s*eDP-1\b' "$CONFIG" > "$TMP" || true
 else
   : > "$TMP"
 fi
 
-# eDP-1 je nach Deckelzustand voranstellen
+# eDP-1 je nach aktuellem (oder gegebenem) Deckelzustand voranstellen
 if [[ "$STATE" == "open" ]]; then
-  # aktivieren, automatische Größe/Position/Scale
-  # Wenn du feste Werte willst, ersetze "preferred, auto, 1"
   sed -i '1i monitor = eDP-1, preferred, auto, 2' "$TMP"
 else
-  # deaktivieren
   sed -i '1i monitor = eDP-1, disable' "$TMP"
 fi
 
@@ -35,6 +49,5 @@ mv "$TMP" "$CONFIG"
 # Hyprland neu laden
 hyprctl reload >/dev/null 2>&1 || true
 
-# Optional: Hinweis
 command -v notify-send >/dev/null 2>&1 && \
   notify-send "Hyprland Monitors" "Lid ${STATE}: eDP-1 $( [[ $STATE == open ]] && echo aktiviert || echo deaktiviert )"
