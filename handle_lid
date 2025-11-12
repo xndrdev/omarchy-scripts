@@ -22,6 +22,8 @@ STATE="${1:-}"   # "open" | "close" | "check"
 }
 
 if [[ "$STATE" == "check" ]]; then
+  # Beim Start kurz warten, damit Hyprland vollständig initialisiert ist
+  sleep 2
   if is_lid_open; then
     STATE="open"
   else
