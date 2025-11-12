@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONFIG="$HOME/.config/hypr/monitors.conf"
-TMP="$(mktemp)"
-
 # Funktion checkt ob das Laptop offen oder zu ist (returns 0=open, 1=closed)
 is_lid_open() {
   local statefile="/proc/acpi/button/lid/LID0/state"
@@ -31,25 +28,46 @@ if [[ "$STATE" == "check" ]]; then
   fi
 fi
 
-# Bestehende Config ohne eDP-1-Zeilen übernehmen
-if [[ -f "$CONFIG" ]]; then
-  grep -Ev '^\s*monitor\s*=\s*eDP-1\b' "$CONFIG" > "$TMP" || true
-else
-  : > "$TMP"
-fi
+# Funktion aktiviert alle verfügbaren Monitore als Fallback
+enable_all_monitors() {
+  local monitors=$(hyprctl monitors 2>/dev/null | grep -E "^Monitor" | awk '{print $2}' | tr -d ':')
+  local config_file="$HOME/.config/hypr/monitors.conf"
+  local tmp_file=$(mktemp)
+  
+  # Bestehende Config ohne monitor-Zeilen übernehmen
+  if [[ -f "$config_file" ]]; then
+    grep -Ev '^\s*monitor\s*=' "$config_file" > "$tmp_file" || true
+  else
+    : > "$tmp_file"
+  fi
+  
+  # Alle Monitore mit preferred aktivieren
+  for monitor in $monitors; do
+    sed -i "1i monitor = $monitor, preferred, auto" "$tmp_file"
+  done
+  
+  # Atomar schreiben
+  mv "$tmp_file" "$config_file"
+  
+  # Hyprland neu laden
+  hyprctl reload >/dev/null 2>&1 || true
+}
 
-# eDP-1 je nach aktuellem (oder gegebenem) Deckelzustand voranstellen
+# Profil je nach Deckelzustand laden
 if [[ "$STATE" == "open" ]]; then
-  sed -i '1i monitor = eDP-1, preferred, auto, 2' "$TMP"
+  # Deckel ist offen - Laptop-Profil laden
+  if hyprmon -profile laptop >/dev/null 2>&1; then
+    command -v notify-send >/dev/null 2>&1 && \
+      notify-send "Hyprland Monitors" "Laptop-Deckel offen: Laptop-Profil geladen"
+  else
+    # Fallback: Alle Monitore aktivieren
+    enable_all_monitors
+    command -v notify-send >/dev/null 2>&1 && \
+      notify-send "Hyprland Monitors" "Laptop-Profil konnte nicht geladen werden - alle Monitore aktiviert"
+  fi
 else
-  sed -i '1i monitor = eDP-1, disable' "$TMP"
+  # Deckel ist zu - nichts tun (oder anderes Profil, falls gewünscht)
+  # hyprmon -profile work >/dev/null 2>&1 || true
+  command -v notify-send >/dev/null 2>&1 && \
+    notify-send "Hyprland Monitors" "Laptop-Deckel zu"
 fi
-
-# Atomar schreiben
-mv "$TMP" "$CONFIG"
-
-# Hyprland neu laden
-hyprctl reload >/dev/null 2>&1 || true
-
-command -v notify-send >/dev/null 2>&1 && \
-  notify-send "Hyprland Monitors" "Lid ${STATE}: eDP-1 $( [[ $STATE == open ]] && echo aktiviert || echo deaktiviert )"
