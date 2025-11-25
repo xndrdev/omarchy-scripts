@@ -12,21 +12,23 @@ is_lid_open() {
   fi
 }
 
-STATE="${1:-}"   # "open" | "close" | "check"
-[[ "$STATE" == "open" || "$STATE" == "close" || "$STATE" == "check" ]] || {
-  echo "Usage: $0 {open|close|check}" >&2
-  exit 1
-}
-
-if [[ "$STATE" == "check" ]]; then
-  # Beim Start kurz warten, damit Hyprland vollständig initialisiert ist
-  sleep 2
-  if is_lid_open; then
-    STATE="open"
-  else
-    STATE="close"
+# Funktion prüft ob externe Monitore angeschlossen sind (returns 0=ja, 1=nein)
+has_external_monitors() {
+  local monitors=$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name' 2>/dev/null || echo "")
+  if [[ -z "$monitors" ]]; then
+    return 1
   fi
-fi
+  
+  # Zähle Monitore, die NICHT eDP* sind (Laptop-Monitor)
+  local external_count=0
+  while IFS= read -r monitor; do
+    if [[ ! "$monitor" =~ ^eDP ]]; then
+      ((external_count++)) || true
+    fi
+  done <<< "$monitors"
+  
+  [[ $external_count -gt 0 ]]
+}
 
 # Funktion aktiviert alle verfügbaren Monitore als Fallback
 enable_all_monitors() {
@@ -52,6 +54,70 @@ enable_all_monitors() {
   # Hyprland neu laden
   hyprctl reload >/dev/null 2>&1 || true
 }
+
+# Funktion aktiviert nur den Laptop-Monitor
+enable_laptop_monitor() {
+  local config_file="$HOME/.config/hypr/monitors.conf"
+  local tmp_file=$(mktemp)
+  
+  # Bestehende Config ohne monitor-Zeilen übernehmen
+  if [[ -f "$config_file" ]]; then
+    grep -Ev '^\s*monitor\s*=' "$config_file" > "$tmp_file" || true
+  else
+    : > "$tmp_file"
+  fi
+  
+  # Finde den Laptop-Monitor (normalerweise eDP*)
+  local laptop_monitor=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.name | startswith("eDP")) | .name' 2>/dev/null | head -n1)
+  
+  if [[ -n "$laptop_monitor" ]]; then
+    # Laptop-Monitor aktivieren
+    sed -i "1i monitor = $laptop_monitor, preferred, auto" "$tmp_file"
+    
+    # Atomar schreiben
+    mv "$tmp_file" "$config_file"
+    
+    # Hyprland neu laden
+    hyprctl reload >/dev/null 2>&1 || true
+    return 0
+  else
+    rm -f "$tmp_file"
+    return 1
+  fi
+}
+
+STATE="${1:-}"   # "open" | "close" | "check"
+[[ "$STATE" == "open" || "$STATE" == "close" || "$STATE" == "check" ]] || {
+  echo "Usage: $0 {open|close|check}" >&2
+  exit 1
+}
+
+if [[ "$STATE" == "check" ]]; then
+  # Beim Start kurz warten, damit Hyprland vollständig initialisiert ist
+  sleep 2
+  
+  # Prüfe zuerst, ob externe Monitore angeschlossen sind
+  if ! has_external_monitors; then
+    # Keine externen Monitore - IMMER Laptop-Monitor aktivieren
+    if enable_laptop_monitor; then
+      command -v notify-send >/dev/null 2>&1 && \
+        notify-send "Hyprland Monitors" "Keine externen Monitore erkannt - Laptop-Monitor aktiviert"
+    else
+      # Fallback: Alle Monitore aktivieren
+      enable_all_monitors
+      command -v notify-send >/dev/null 2>&1 && \
+        notify-send "Hyprland Monitors" "Keine externen Monitore - alle Monitore aktiviert"
+    fi
+    exit 0
+  fi
+  
+  # Externe Monitore vorhanden - normaler Ablauf
+  if is_lid_open; then
+    STATE="open"
+  else
+    STATE="close"
+  fi
+fi
 
 # Profil je nach Deckelzustand laden
 if [[ "$STATE" == "open" ]]; then
