@@ -96,18 +96,14 @@ if [[ "$STATE" == "check" ]]; then
   # Beim Start kurz warten, damit Hyprland vollständig initialisiert ist
   sleep 2
   
-  # Prüfe zuerst, ob externe Monitore angeschlossen sind
+  # IMMER zuerst den Laptop-Monitor aktivieren, damit er garantiert funktioniert
+  enable_laptop_monitor || enable_all_monitors
+  
+  # Prüfe, ob externe Monitore angeschlossen sind
   if ! has_external_monitors; then
-    # Keine externen Monitore - IMMER Laptop-Monitor aktivieren
-    if enable_laptop_monitor; then
-      command -v notify-send >/dev/null 2>&1 && \
-        notify-send "Hyprland Monitors" "Keine externen Monitore erkannt - Laptop-Monitor aktiviert"
-    else
-      # Fallback: Alle Monitore aktivieren
-      enable_all_monitors
-      command -v notify-send >/dev/null 2>&1 && \
-        notify-send "Hyprland Monitors" "Keine externen Monitore - alle Monitore aktiviert"
-    fi
+    # Keine externen Monitore - Laptop-Monitor bleibt aktiviert
+    command -v notify-send >/dev/null 2>&1 && \
+      notify-send "Hyprland Monitors" "Keine externen Monitore erkannt - Laptop-Monitor aktiviert"
     exit 0
   fi
   
