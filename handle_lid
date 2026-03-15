@@ -59,31 +59,31 @@ enable_all_monitors() {
 enable_laptop_monitor() {
   local config_file="$HOME/.config/hypr/monitors.conf"
   local tmp_file=$(mktemp)
-  
+
   # Bestehende Config ohne monitor-Zeilen übernehmen
   if [[ -f "$config_file" ]]; then
     grep -Ev '^\s*monitor\s*=' "$config_file" > "$tmp_file" || true
   else
     : > "$tmp_file"
   fi
-  
-  # Finde den Laptop-Monitor (normalerweise eDP*)
-  local laptop_monitor=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.name | startswith("eDP")) | .name' 2>/dev/null | head -n1)
-  
-  if [[ -n "$laptop_monitor" ]]; then
-    # Laptop-Monitor aktivieren
-    sed -i "1i monitor = $laptop_monitor, preferred, auto" "$tmp_file"
-    
-    # Atomar schreiben
-    mv "$tmp_file" "$config_file"
-    
-    # Hyprland neu laden
-    hyprctl reload >/dev/null 2>&1 || true
-    return 0
-  else
-    rm -f "$tmp_file"
-    return 1
+
+  # Finde den Laptop-Monitor - "all" zeigt auch disabled Monitore
+  local laptop_monitor=$(hyprctl monitors all -j 2>/dev/null | jq -r '.[] | select(.name | startswith("eDP")) | .name' 2>/dev/null | head -n1)
+
+  # Fallback: direkt eDP-1 verwenden wenn hyprctl nichts liefert
+  if [[ -z "$laptop_monitor" ]]; then
+    laptop_monitor="eDP-1"
   fi
+
+  # Laptop-Monitor aktivieren
+  sed -i "1i monitor = $laptop_monitor, preferred, auto" "$tmp_file"
+
+  # Atomar schreiben
+  mv "$tmp_file" "$config_file"
+
+  # Hyprland neu laden
+  hyprctl reload >/dev/null 2>&1 || true
+  return 0
 }
 
 STATE="${1:-}"   # "open" | "close" | "check"
